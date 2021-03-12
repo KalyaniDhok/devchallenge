@@ -7,13 +7,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.setup.MockMvcBuilders.webAppContextSetup;
 
-import com.db.awmd.challenge.domain.Account;
-import com.db.awmd.challenge.service.AccountsService;
-import com.db.awmd.challenge.service.NotificationService;
-
 import java.math.BigDecimal;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
+
+import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,6 +24,11 @@ import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.test.context.web.WebAppConfiguration;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.context.WebApplicationContext;
+
+import com.db.awmd.challenge.domain.Account;
+import com.db.awmd.challenge.service.AccountsService;
+import com.db.awmd.challenge.service.NotificationService;
+
 
 @RunWith(SpringRunner.class)
 @SpringBootTest
@@ -40,7 +45,7 @@ public class AccountsControllerTest {
 
   @Autowired
   private WebApplicationContext webApplicationContext;
-
+  
   @Before
   public void prepareMockMvc() {
     this.mockMvc = webAppContextSetup(this.webApplicationContext).build();
@@ -146,6 +151,30 @@ public class AccountsControllerTest {
 	accountsService.createAccount(new Account("Id-456", new BigDecimal(1000)));
 
     this.mockMvc.perform(post("/v1/accounts/transfer/" + "Id-123" + "/" + "Id-456" + "/" + 1050)).andExpect(status().isBadRequest());
-
   }
+  
+  @Test
+  public void transferAmountMultipleThread() throws Exception {
+	this.accountsService.createAccount(new Account("Id-123", new BigDecimal(1000)));
+	this.accountsService.createAccount(new Account("Id-789", new BigDecimal(1000)));
+	ThreadPoolExecutor executor = (ThreadPoolExecutor) Executors.newFixedThreadPool(20);
+	CountDownLatch latch = new CountDownLatch(4);
+	for (int i = 0; i < 20; i++) {
+	  executor.execute(() -> {
+	    try {
+		  this.mockMvc.perform(post("/v1/accounts/transfer/" + "Id-123" + "/" + "Id-789" + "/" + 5)).andExpect(status().isCreated());
+		} catch (Exception e) {
+		  e.printStackTrace();
+	    }
+	  latch.countDown();
+	  });
+	}
+	latch.await();
+	System.out.println(this.accountsService.getAccount("Id-123").getBalance());
+	System.out.println(this.accountsService.getAccount("Id-789").getBalance());
+	Assert.assertTrue(this.accountsService.getAccount("Id-123").getBalance().equals(new BigDecimal(900)));
+	Assert.assertTrue(this.accountsService.getAccount("Id-789").getBalance().equals(new BigDecimal(1100)));
+	
+  }
+ 
 }

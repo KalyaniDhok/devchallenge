@@ -38,7 +38,7 @@ public class AccountsController {
     log.info("Creating account {}", account);
 
     try {
-    this.accountsService.createAccount(account);
+      this.accountsService.createAccount(account);
     } catch (DuplicateAccountIdException daie) {
       return new ResponseEntity<>(daie.getMessage(), HttpStatus.BAD_REQUEST);
     }
